@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+    <head>
+
+        <meta charset="UTF-8">
+        <title>My Paint</title>
+        <!-- <link href="./css/styleshit.css" rel="stylesheet" type="text/plain"> -->
+
+        <style>
+
+            body {
+
+                background-color: slategrey;
+
+            }
+            
+            #paint {
+
+                background: #fff;
+                border: solid 5px red;
+            
+            }
+
+            h1{
+
+                color: whitesmoke;
+
+            }
+
+            input[type="submit"] {
+                
+                cursor:pointer;
+                background-color: #4CAF50; /* Green */
+                border: none;
+                color: white;
+                padding: 1px 18px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 15px;
+
+            }
+
+            #eraser {
+
+                cursor: pointer;
+                background-color: rgb(190, 0, 0); /* Green */
+                border: none;
+                color: white;
+                padding: 1px 18px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 15px;
+
+            }
+
+        </style>
+
+    </head>
+
+    <body>
+
+        <script type="text/javascript">
+        
+            visiter_name = prompt("Input your name : ")
+            if(visiter_name != null && visiter_name != "")
+            alert("Welcome : "+visiter_name);
+            else
+            alert("Blank name ...!")
+        
+        </script>
+
+        <center><h1>GuessWhat</h1></center>
+
+        <div id="sketch">
+
+            <center><canvas id="paint" width="600" height="350"></canvas></center>
+
+        </div>
+
+        <br>
+
+        <center><button id="eraser" onclick="toggleEraser()">Eraser</button></center>
+
+        <br>
+
+        <center><input type="color" id="colores" onchange="scolor();"/></center>
+
+        <br>
+
+        <center><div id="log"></div>
+
+        <form id="form">
+
+            <input type="submit" value="Send" />
+            <input type="text" id="msg" size="64" />
+
+        </form></center>
+
+        <script>
+
+            // WEBSOCKET
+            var conn;
+            var msg = document.getElementById("msg"); // renvoie l'objet à son élément
+            var log = document.getElementById("log");
+
+            var lastX = 0;
+            var lastY = 0;
+
+            function appendLog(item) {
+
+                var doScroll = log.scrollTop > log.scrollHeight - log.clientHeight - 1;
+                log.appendChild(item);
+
+                if (doScroll) {
+                    log.scrollTop = log.scrollHeight - log.clientHeight;
+
+                }
+
+            }
+
+            document.getElementById("form").onsubmit = function () {
+
+                if (!conn) {
+
+                    return false;
+                
+                }
+
+                if (!msg.value) {
+                
+                    return false;
+                
+                }
+
+                let message = {
+                
+                    data: msg.value,
+                    type: 'message',
+                    name: visiter_name
+                
+                }
+                
+                conn.send(JSON.stringify(message));
+                
+                // conn.send(msg.value);
+                msg.value = "";
+                return false;
+            
+            };
+
+            if (window["WebSocket"]) {
+            
+                conn = new WebSocket("ws://" + document.location.host + "/ws");
+            
+                conn.onclose = function (evt) {
+            
+                    var item = document.createElement("div");
+                    item.innerHTML = "<b>Connection closed.</b>";
+                    appendLog(item);
+            
+                };
+            
+                //affichage des messages avec Nicknames 
+                conn.onmessage = async function (evt) {
+            
+                    var msg = await JSON.parse(evt.data);
+            
+                    if (msg.type == 'message' ) {
+            
+                        console.log('message =>', msg);
+                        var messages = msg.data.split('\n');
+            
+                        for (var i = 0; i < messages.length; i++) {
+            
+                            var item = document.createElement("div");
+                            item.innerText = msg.name + ':' + messages[i];
+                            appendLog(item);
+            
+                        }
+
+                        console.log(messages);
+            
+                    } else {
+            
+                        console.log('draw', msg.data);
+                        ctx.moveTo(msg.data.x, msg.data.y);
+            
+                        if (msg.data.start) {
+            
+                            ctx.beginPath();
+                            ctx.strokeStyle = msg.data.color;
+                            ctx.moveTo(msg.data.x, msg.data.y);
+                            [lastX, lastY] = [msg.data.x, msg.data.y];
+            
+                        } else if (!msg.data.start && !msg.data.drawing) {
+            
+                            console.log('stop drawing');
+                            ctx.lineTo(msg.data.x, msg.data.y);
+                            ctx.stroke();
+                            ctx.closePath();
+            
+                        } else {
+            
+                            ctx.moveTo(lastX, lastY);
+                            ctx.lineTo(msg.data.x, msg.data.y);
+                            ctx.stroke();
+                            [lastX, lastY] = [msg.data.x, msg.data.y];
+            
+                        }
+            
+                    }
+            
+                };
+            
+            } else {
+            
+                var item = document.createElement("div");
+                item.innerHTML = "<b>Your browser does not support WebSockets.</b>";
+                appendLog(item);
+            
+            }
+
+            // CANVAS
+            var canvas = document.getElementById('paint');
+            var ctx = canvas.getContext('2d'); // retourne un contexte de dessin sur le canevas, ou null si l'identificateur de contexte n'est pas supporté
+            // ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            var sketch = document.getElementById('sketch');
+            var sketch_style = getComputedStyle(sketch);
+
+            var color = "";
+            var eraser = false;
+
+            canvas.width = 500;
+            canvas.height = 250;
+
+            var mouse = {x: 0, y: 0};
+
+            /* Capture de souris */
+            canvas.addEventListener('mousemove', function(e) {
+            
+                mouse.x = e.pageX - this.offsetLeft; // this.offsetLeft =  renvoie la position du coin supérieur gauche de l'élément.
+                mouse.y = e.pageY - this.offsetTop; // this.offsetTop = renvoie la distance entre l'élément courant et le haut du nœud
+            
+            }, false);
+
+            /* Dessin sur l'app paint*/
+            ctx.lineJoin = 'round'; // ctx.lineJoin = détermine la forme utilisée pour joindre deux segments de ligne là où ils se rencontrent.
+            ctx.lineCap = 'round'; // ctx.lineCap = détermine la façon dont les extrémités de chaque ligne sont dessinées.
+
+            ctx.strokeStyle = "blue";
+            
+            function getColor(colour){ctx.strokeStyle = colour;}
+
+            function getSize(size){ctx.lineWidth = size;}
+        
+            canvas.addEventListener('mousedown', function(e) {
+            
+                ctx.beginPath(); // ctx.beginPath =  permet de commencer un nouveau chemin en vidant la liste des sous-chemins. 
+            
+                /* Gomme */
+                if (eraser) { 
+            
+                    ctx.globalCompositeOperation = "destination-out"; // définit le type d'opération de composition à appliquer lors du dessin de nouvelles formes.
+                    ctx.lineWidth = 50;
+            
+                } else { 
+            
+                    ctx.globalCompositeOperation = "source-over"; 
+                    ctx.lineWidth = 1;
+            
+                }
+            
+                let message = {
+                    data: {x: mouse.x, y: mouse.y, start: true, drawing: true, color: document.getElementById("colores").value},
+                    type: 'draw',
+                    drawing: true
+                }
+            
+                conn.send(JSON.stringify(message));
+                ctx.moveTo(mouse.x, mouse.y); // déplace le point de départ 
+
+                canvas.addEventListener('mousemove', onPaint, false);
+            
+            }, false);
+
+            canvas.addEventListener('mouseup', function() {
+            
+                let message = {
+                    data: {x: mouse.x, y: mouse.y, start: false, drawing: false, color: document.getElementById("colores").value},
+                    type: 'draw',
+                }
+            
+                conn.send(JSON.stringify(message));
+                canvas.removeEventListener('mousemove', onPaint, false);
+
+            }, false);
+
+            var onPaint = function() {
+            
+                let message = {
+                    data: {x: mouse.x, y: mouse.y, start: false, drawing: true, color: document.getElementById("colores").value},
+                    type: 'draw',
+            
+                }
+            
+                conn.send(JSON.stringify(message));
+                ctx.lineTo(mouse.x, mouse.y);
+                ctx.stroke();
+            
+            }
+
+            /* Nettoyage canvas */
+            function clearCanvas() {
+            
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            }
+
+            /* function gomme */
+            function toggleEraser() {
+            
+                eraser = !eraser;
+            
+            }
+
+            /* function couleur */
+            function scolor() {
+                ctx.strokeStyle = document.getElementById("colores").value;
+            }
+
+        </script>
+        
+    </body>
+
+</html>
